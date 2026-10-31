@@ -13,6 +13,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -20,21 +21,18 @@ android {
     }
 
     defaultConfig {
-        // Application ID
         applicationId = "org.blooddonation.tracker"
-        // minSdk 23 is required for modern Firebase Auth, Cloud Firestore, and Google Maps
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Maps API key from gradle property or fallback empty
-        manifestPlaceholders["MAPS_API_KEY"] = project.findProperty("MAPS_API_KEY") as? String ?: ""
+        manifestPlaceholders["MAPS_API_KEY"] =
+            project.findProperty("MAPS_API_KEY") as? String ?: ""
     }
 
     buildTypes {
         release {
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -44,8 +42,11 @@ flutter {
     source = "../.."
 }
 
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
 // Automatically apply Google Services plugin when google-services.json is supplied by developer
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
-
