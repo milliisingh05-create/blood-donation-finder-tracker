@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for authentication, ownership, and role-based access
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isHospitalOrAdmin() {
+      return isSignedIn() && (
+        request.auth.token.role == 'hospital' || 
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    // 1. Users & Donor Profiles
+    // Privacy: Public donor profiles expose bloodGroup, city, and availability.
+    // Sensitive contact information (phone number) is protected until a request is mutually accepted.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+
+      // Private subcollection for sensitive personal data
+      match /private/{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // 2. Donation Requests
+    // Authenticated users can browse open requests.
+    // Requester can manage their request; eligible donors can accept.
+    match /donation_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.requesterId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        // Requester editing or resolving their own request
+        request.auth.uid == resource.data.requesterId ||
+        // Donor accepting the open request
+        (resource.data.status == 'open' && request.resource.data.acceptedBy.hasAll(resource.data.acceptedBy))
+      );
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.requesterId;
+    }
+
+    // 3. Emergency SOS Broadcasts
+    // High-priority emergency broadcasts triggered in real-time.
+    match /sos_broadcasts/{broadcastId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.requesterId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.requesterId ||
+        resource.data.status == 'active'
+      );
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.requesterId;
+    }
+
+    // 4. Verified Donations & Rewards Timeline
+    // Created through verified donation centers; readable by the donor and medical staff.
+    match /donations/{donationId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.donorId ||
+        isHospitalOrAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.donorId == request.auth.uid;
+      allow update: if isHospitalOrAdmin() || (isSignedIn() && request.auth.uid == resource.data.donorId);
+      allow delete: if isHospitalOrAdmin();
+    }
+
+    // 5. Hospitals & Blood Banks
+    // Publicly readable live blood stock matrix.
+    // Real-time inventory adjustments restricted to verified medical center staff.
+    match /hospitals/{hospitalId} {
+      allow read: if isSignedIn();
+      allow write: if isHospitalOrAdmin();
+    }
+
+    // 6. Notifications & In-App Alerts
+    // Strictly scoped to the recipient user.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

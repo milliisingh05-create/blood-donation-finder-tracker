@@ -1,0 +1,54 @@
+name: Flutter CI / CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  analyze-test-build:
+    name: Analyze, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Environment
+        run: flutter doctor -v
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Static Code Analysis
+        run: flutter analyze --fatal-infos
+
+      - name: Run Automated Test Suite
+        run: flutter test --coverage
+
+      - name: Build Web Application
+        run: flutter build web --no-tree-shake-icons
+
+      - name: Build Android Debug APK
+        run: flutter build apk --debug
+
+      - name: Upload Web Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release-bundle
+          path: build/web/
+          retention-days: 7
